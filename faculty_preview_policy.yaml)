@@ -1,0 +1,26 @@
+constraints:
+  PRIVACY_RULE:
+    - name: pii-block
+      match: PII()
+      action: REDACT
+  SECURITY_RULE:
+    - name: inj-block
+      match: INJECTION()
+      action: REFUSE
+  INTERACTION_LIMIT:
+    - name: s2-template-only
+      when: RISK() >= 0.4
+      action: ENFORCE_TEMPLATE_ONLY
+spiral:
+  bands:
+    - S1: [sanitize, pii_mask, injection_scrub]
+    - S2: [template_only]
+    - S3: [dp_summary]   # placeholder in MVP
+    - S4: [vault_core]
+  copper_ground: [refuse, redact, ledger]
+perforations:
+  - id: dp_themes_v1
+    band: S2
+    allow: [TEMPLATE("3 neutral tags; no names; no quotes")]
+    budgets: { calls_per_min: 4, tokens_per_hour: 300 }
+    ledger_tag: "whisper:themes"
