@@ -1,0 +1,6 @@
+colorama
+pyyaml
+regex
+tabulate
+click
+pytest
