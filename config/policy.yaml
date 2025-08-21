@@ -1,0 +1,78 @@
+# config/policy.yaml
+version: 1
+bands:
+  s1:            # router’s view of bands (can differ from detector bands)
+    pressure_thresholds:
+      low: 0.20
+      medium: 0.35
+      high: 0.65
+      critical: 0.90
+
+templates:
+  general_info:
+    set: ["public_safe_summary", "high_level_overview"]
+  pii_notice:
+    set: ["pii_redaction_notice"]
+
+routing:
+  default_action: allow
+  evaluation_order: priority   # honor rule order strictly
+  rules:
+
+    - name: Critical risk blocking
+      priority: 10
+      condition: "s1.pressure >= bands.s1.pressure_thresholds.critical"
+      action: block
+      reason: "Critical security risk detected"
+
+    - name: High risk blocking
+      priority: 20
+      condition: "s1.pressure >= bands.s1.pressure_thresholds.high"
+      action: block
+      reason: "High security risk detected"
+
+    - name: Budget exhaustion
+      priority: 30
+      condition: "budget.remaining_epsilon < 0.01"
+      action: block
+      reason: "Privacy budget exhausted"
+
+    - name: Rate limiting
+      priority: 40
+      condition: "rate_limit.queries_per_minute_exceeded == True"
+      action: block
+      reason: "Rate limit exceeded"
+      retry_after: 60
+
+    - name: Scope authorization
+      priority: 50
+      condition: "query.required_scope != user.scope"
+      action: block
+      reason: "Insufficient authorization scope"
+
+    - name: PII redaction (medium)
+      priority: 60
+      condition: "s1.patterns.pii_leak >= 1 and s1.pressure >= 0.35"
+      action: template
+      reason: "PII detected — redacted and summarized"
+      template_set: ["pii_notice"]
+
+    - name: Medium risk template enforcement
+      priority: 70
+      condition: "s1.pressure >= bands.s1.pressure_thresholds.medium"
+      action: template
+      reason: "Medium risk — restricted to template responses"
+      template_set: ["general_info"]
+
+    - name: Low risk template enforcement
+      priority: 80
+      condition: "s1.pressure >= bands.s1.pressure_thresholds.low"
+      action: template
+      reason: "Low risk — public information only"
+      template_set: ["general_info"]
+
+    - name: Default allow
+      priority: 1000
+      condition: "default"
+      action: allow
+      reason: "Low risk"
