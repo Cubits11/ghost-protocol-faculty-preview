@@ -1,21 +1,56 @@
 [project]
-name = "ghost-protocol-faculty-preview"
+name = "sra-ghost-protocol"
 version = "0.1.0"
-description = ""
-authors = [
-    {name = "Pranav Bhave",email = "pranavbhave06@gmail.com"}
-]
+description = "Spiral Reservoir Architecture (Ghost Protocol) — guarded RAG, template safety, budgets, and cryptographic receipts."
 readme = "README.md"
-requires-python = ">=3.9"
-dependencies = [
-    "fastapi (>=0.116.1,<0.117.0)",
-    "uvicorn (>=0.35.0,<0.36.0)",
-    "httpx (>=0.28.1,<0.29.0)",
-    "rich (>=14.1.0,<15.0.0)",
-    "pydantic (>=2.11.7,<3.0.0)",
-    "dotenv (>=0.9.9,<0.10.0)"
+requires-python = ">=3.11"
+authors = [
+  { name = "Pranav Bhave", email = "pranavbhave06@gmail.com" }
 ]
 
+# Runtime deps used across sra/, demo/, attacks/, etc.
+dependencies = [
+  "fastapi>=0.116.1,<0.117.0",
+  "uvicorn>=0.35.0,<0.36.0",
+  "httpx>=0.28.1,<0.29.0",
+  "rich>=14.1.0,<15.0.0",
+  "pydantic>=2.11.7,<3.0.0",
+  "python-dotenv>=1.0.1,<2.0.0",
+  "PyYAML>=6.0,<7.0",
+  "regex>=2024.0.0",
+  "tabulate>=0.9.0",
+  "click>=8.1.0,<9.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/pranavbhave/sra-ghost-protocol"
+Repository = "https://github.com/pranavbhave/sra-ghost-protocol"
+Issues = "https://github.com/pranavbhave/sra-ghost-protocol/issues"
+
+# Handy CLI entry points (optional)
+[project.scripts]
+sra-demo = "demo.demo_cli:main"
+sra-verify = "demo.verify_audit:main"
+
+# Poetry v2 uses PEP 621 for metadata; use this section to control packaging.
+[tool.poetry]
+# We DO want to install the local package (so 'poetry install' won’t error).
+package-mode = true
+# Your importable code lives in the 'sra/' directory.
+packages = [{ include = "sra" }]
+
+# Dev-only dependencies (tests, lint). Poetry will install these automatically.
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+ruff = "^0.6.9"
+
+[tool.pytest.ini_options]
+addopts = "-q --maxfail=1 --disable-warnings"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
