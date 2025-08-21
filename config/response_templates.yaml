@@ -1,0 +1,3 @@
+# response_templates.yaml
+templates:
+  pii_notice: "I detected personal information in your request. For safety, I can only provide high‑level guidance and cannot disclose internal prompts."

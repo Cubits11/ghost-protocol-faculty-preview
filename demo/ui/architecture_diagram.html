@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SRA Security Pipeline</title>
+<meta name="description" content="Systematic egress control with classification, policy routing, budgets, and cryptographic audit." />
+<style>
+  :root{
+    --bg:#0b0c14; --panel1:#121427; --panel2:#0e1120; --stroke:#1f2440;
+    --accent:#5aa1ff; --text:#e9eefb; --muted:#a8b2d1;
+    --good:#2ed573; --warn:#ffa502; --bad:#ff4757; --crit:#7d3cff;
+    --chip-bg:rgba(255,255,255,.04);
+  }
+  @media (prefers-color-scheme: light) {
+    :root{
+      --bg:#f6f7fb; --panel1:#ffffff; --panel2:#f1f4fb; --stroke:#d7dbe6;
+      --text:#121521; --muted:#5b6374; --chip-bg:#f7f9ff;
+    }
+  }
+  * { box-sizing: border-box }
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font:14px/1.55 system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif}
+  .container{max-width:1040px;margin:28px auto;padding:0 16px}
+  .title{font-size:28px;font-weight:800;margin:6px 0 6px;
+    background:linear-gradient(135deg,var(--accent),#3a7ecc 70%);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .subtitle{color:var(--muted);margin:-2px 0 18px}
+  .row{display:grid;grid-template-columns:1fr;gap:14px}
+
+  .layer{background:linear-gradient(135deg,var(--panel1),var(--panel2));
+    border:1px solid var(--stroke);border-radius:14px;padding:16px;position:relative;
+    transition:.2s box-shadow,.2s transform}
+  .layer:hover{transform:translateY(-1px);box-shadow:0 10px 32px rgba(0,0,0,.25)}
+  .hdr{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+  .icon{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),#3a7ecc);
+    display:grid;place-items:center;font-size:18px;color:white}
+  .h{font-weight:800}
+  .d{color:var(--muted)}
+  .arrow{display:grid;place-items:center;color:var(--accent);margin:2px 0}
+  .arrow svg{width:22px;height:22px;opacity:.9; animation: bob 1.8s ease-in-out infinite}
+  @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(3px)} }
+
+  .kvs{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+  .kv{background:var(--chip-bg);border:1px solid var(--stroke);border-radius:8px;padding:6px 8px;font-size:12px}
+
+  .router{border-style:dashed}
+  .legend{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px}
+  .chip{background:var(--chip-bg);border:1px solid var(--stroke);border-radius:7px;padding:8px 10px;font-size:12px;cursor:default}
+  .chip strong{font-weight:800}
+  .chip.btn{cursor:pointer;user-select:none}
+  .low   {border-left:3px solid var(--good)}
+  .med   {border-left:3px solid var(--warn)}
+  .high  {border-left:3px solid var(--bad)}
+  .crit  {border-left:3px solid var(--crit)}
+  .selected{outline:2px solid var(--accent);box-shadow:0 0 0 3px rgba(90,161,255,.18)}
+
+  /* S3 budget meter */
+  .meter{margin-top:10px;background:rgba(0,0,0,.18);border:1px solid var(--stroke);border-radius:10px;padding:12px}
+  .bar{height:10px;background:rgba(255,255,255,.06);border-radius:7px;overflow:hidden;border:1px solid #283042}
+  .fill{height:100%;width:72%;background:linear-gradient(90deg,var(--bad),var(--warn),var(--good));transition:width .6s ease}
+  .bar-label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:7px}
+  .bar-label code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+  /* S4 chain */
+  .chain{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+  .block{flex:1 0 180px;min-width:180px;background:rgba(0,0,0,.18);border:1px solid var(--stroke);border-radius:10px;padding:10px}
+  .hash{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#9aa8c7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ok{color:var(--good);font-weight:800}
+  .fail{color:var(--bad);font-weight:800}
+  .foot{margin-top:18px;color:var(--muted);font-size:12px}
+  .kbd{padding:.1rem .35rem;border:1px solid var(--stroke);border-bottom-width:2px;border-radius:5px;background:var(--panel2);font-family:ui-monospace,monospace}
+
+  /* Responsive */
+  @media (min-width: 820px){
+    .row{grid-template-columns:1fr 1fr}
+    .span-2{grid-column:1 / -1}
+  }
+  @media print {
+    .layer:hover{transform:none;box-shadow:none}
+    .arrow svg{animation:none}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">SRA Security Pipeline</h1>
+    <div class="subtitle">Systematic egress control with classification, policy routing, budgets, and cryptographic audit.</div>
+
+    <!-- S1 -->
+    <div class="layer">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">🔍</div>
+        <div>
+          <div class="h">S1 — Risk Detection</div>
+          <div class="d">Pattern & light‑semantic analysis; outputs <em>pressure</em> → {low, medium, high, critical}</div>
+        </div>
+      </div>
+      <div class="kvs">
+        <div class="kv">Regex + Aho‑Corasick multi‑pattern scan</div>
+        <div class="kv">Pressure ∈ [0,1] (logistic squash)</div>
+        <div class="kv">Context nudge (multi‑turn)</div>
+      </div>
+      <div class="kvs">
+        <div class="kv">pressure=<code id="pressureVal">—</code></div>
+        <div class="kv">risk=<code id="riskVal">—</code></div>
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="down">
+        <path d="M12 16a1 1 0 0 1-.7-.29l-6-6a1 1 0 1 1 1.4-1.42L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6A1 1 0 0 1 12 16z"/>
+      </svg>
+    </div>
+
+    <!-- Router -->
+    <div class="layer router">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">🚦</div>
+        <div>
+          <div class="h">Policy Router</div>
+          <div class="d">Thresholds map pressure → action; capability/egress gates enforce limits</div>
+        </div>
+      </div>
+
+      <!-- Threshold legend (matches your defaults) -->
+      <div class="legend" id="legend">
+        <span class="chip low"><strong>Low</strong> &lt; 0.40 → Allow</span>
+        <span class="chip med"><strong>Medium</strong> ≥ 0.40 → Template‑only</span>
+        <span class="chip high"><strong>High</strong> ≥ 0.70 → Copper Ground</span>
+        <span class="chip crit"><strong>Critical</strong> ≥ 0.90 → Hard Block</span>
+      </div>
+
+      <!-- Clickable action chips to simulate routing decision -->
+      <div class="legend" aria-label="Simulate decision">
+        <span class="chip btn low"   data-action="ALLOW">ALLOW</span>
+        <span class="chip btn med"   data-action="TEMPLATE">TEMPLATE</span>
+        <span class="chip btn high"  data-action="BLOCKED">BLOCK (High)</span>
+        <span class="chip btn crit"  data-action="BLOCKED_CRIT">BLOCK (Critical)</span>
+      </div>
+
+      <div class="kvs">
+        <div class="kv">router decision=<code id="decisionVal">—</code></div>
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="down">
+        <path d="M12 16a1 1 0 0 1-.7-.29l-6-6a1 1 0 1 1 1.4-1.42L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6A1 1 0 0 1 12 16z"/>
+      </svg>
+    </div>
+
+    <!-- S2 -->
+    <div class="layer">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">🧩</div>
+        <div>
+          <div class="h">S2 — Template‑Safe Responses</div>
+          <div class="d">Finite templates + slot filters; prevents arbitrary egress under risk</div>
+        </div>
+      </div>
+      <div class="kvs">
+        <div class="kv">Regular‑language schema check</div>
+        <div class="kv">Topic‑scoped, high‑level content</div>
+      </div>
+      <div class="kvs">
+        <div class="kv">template=<code id="templateVal">general</code></div>
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="down">
+        <path d="M12 16a1 1 0 0 1-.7-.29l-6-6a1 1 0 1 1 1.4-1.42L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6A1 1 0 0 1 12 16z"/>
+      </svg>
+    </div>
+
+    <!-- S3 -->
+    <div class="layer">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">⚖️</div>
+        <div>
+          <div class="h">S3 — Budgets & Rate Governors</div>
+          <div class="d">Track ε‑spend / rate limits; throttle on exhaustion</div>
+        </div>
+      </div>
+      <div class="meter" aria-live="polite">
+        <div class="bar"><div class="fill" id="epsFill" style="width:72%"></div></div>
+        <div class="bar-label"><span>Budget remaining</span><span>ε = <code id="epsVal">0.72</code></span></div>
+      </div>
+      <div class="kvs">
+        <div class="kv">QPM=<code id="qpmLimit">60</code></div>
+        <div class="kv">window=<code id="qpmWindow">60s</code></div>
+      </div>
+    </div>
+
+    <div class="arrow" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" role="img" aria-label="down">
+        <path d="M12 16a1 1 0 0 1-.7-.29l-6-6a1 1 0 1 1 1.4-1.42L12 13.6l5.3-5.3a1 1 0 1 1 1.4 1.42l-6 6A1 1 0 0 1 12 16z"/>
+      </svg>
+    </div>
+
+    <!-- S4 -->
+    <div class="layer">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">📜</div>
+        <div>
+          <div class="h">S4 — Cryptographic Audit</div>
+          <div class="d">SHA‑256 hash‑chained, tamper‑evident log of decisions, reasons, and budgets</div>
+        </div>
+      </div>
+      <div class="chain" id="chain">
+        <div class="block">
+          <div class="hash">#0 GENESIS · 0x9f25…</div>
+          <div class="d">ALLOW · Low risk</div>
+        </div>
+        <div class="block">
+          <div class="hash">#1 H(H(#0)||e1) · 0xa12b…</div>
+          <div class="d">TEMPLATE · Medium risk</div>
+        </div>
+        <div class="block">
+          <div class="hash">#2 H(H(#1)||e2) · 0xbc44…</div>
+          <div class="d">BLOCKED · High risk</div>
+        </div>
+        <div class="block">
+          <div id="integrityBadge" class="ok">INTEGRITY: VERIFIED</div>
+        </div>
+      </div>
+      <div class="kvs">
+        <div class="kv">audit=<span id="auditState"><span class="ok">verified</span></span></div>
+        <div class="kv">last decision=<code id="auditLast">TEMPLATE</code></div>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="layer span-2">
+      <div class="hdr">
+        <div class="icon" aria-hidden="true">✅</div>
+        <div>
+          <div class="h">Response Output</div>
+          <div class="d">Sanitized answer delivered; decision + audit reference attached</div>
+        </div>
+      </div>
+      <div class="kvs">
+        <div class="kv">demo tip: use query params <code>?pressure=0.73&risk=high&eps=0.42&integrity=ok</code></div>
+        <div class="kv">embed: <span class="kbd">st.components.v1.html(open("demo/ui/architecture_diagram.html").read(), height=760)</span></div>
+      </div>
+    </div>
+
+<script>
+  // --- Tiny helper: read query params for live-ish demo control
+  const params = new URLSearchParams(location.search);
+  const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+  // Elements
+  const pressureEl = document.getElementById('pressureVal');
+  const riskEl      = document.getElementById('riskVal');
+  const decisionEl  = document.getElementById('decisionVal');
+  const templateEl  = document.getElementById('templateVal');
+  const epsEl       = document.getElementById('epsVal');
+  const epsFill     = document.getElementById('epsFill');
+  const integBadge  = document.getElementById('integrityBadge');
+  const auditState  = document.getElementById('auditState');
+  const auditLast   = document.getElementById('auditLast');
+
+  // Defaults (aligned with your policy defaults)
+  let pressure = Number(params.get('pressure'));
+  pressure = Number.isFinite(pressure) ? clamp(pressure, 0, 1) : NaN;
+  let risk = (params.get('risk') || '').toLowerCase();
+  let decision = (params.get('decision') || '').toUpperCase();
+  let eps = Number(params.get('eps')); // ε remaining (0..1)
+  eps = Number.isFinite(eps) ? clamp(eps, 0, 1) : 0.72;
+  let integrity = (params.get('integrity') || 'ok').toLowerCase(); // ok|fail
+  let qpm = Number(params.get('qpm')); qpm = Number.isFinite(qpm) ? qpm : 60;
+  let windowSec = Number(params.get('window')); windowSec = Number.isFinite(windowSec) ? windowSec : 60;
+
+  // Derive risk if not provided, based on thresholds
+  if (!risk && Number.isFinite(pressure)) {
+    if (pressure >= 0.90) risk = 'critical';
+    else if (pressure >= 0.70) risk = 'high';
+    else if (pressure >= 0.40) risk = 'medium';
+    else risk = 'low';
+  }
+  // Derive decision if not provided
+  if (!decision) {
+    decision = (risk === 'critical' || risk === 'high') ? 'BLOCKED'
+             : (risk === 'medium' ? 'TEMPLATE' : 'ALLOWED');
+  }
+
+  // Paint S1 values
+  pressureEl.textContent = Number.isFinite(pressure) ? pressure.toFixed(2) : '—';
+  riskEl.textContent = risk || '—';
+
+  // Highlight legend based on risk
+  const legend = document.getElementById('legend');
+  Array.from(legend.querySelectorAll('.chip')).forEach(ch => ch.classList.remove('selected'));
+  if (risk) {
+    const cls = risk.startsWith('crit') ? 'crit' : risk;
+    const match = legend.querySelector('.chip.'+cls);
+    if (match) match.classList.add('selected');
+  }
+
+  // Router decision
+  decisionEl.textContent = decision;
+
+  // Budget meter
+  epsEl.textContent = eps.toFixed(2);
+  epsFill.style.width = (eps*100).toFixed(0) + '%';
+  document.getElementById('qpmLimit').textContent = qpm;
+  document.getElementById('qpmWindow').textContent = windowSec + 's';
+
+  // Integrity badge
+  const setIntegrity = (state) => {
+    const ok = (state === 'ok' || state === 'verified' || state === 'true');
+    integBadge.textContent = ok ? 'INTEGRITY: VERIFIED' : 'INTEGRITY: FAILED';
+    integBadge.classList.toggle('ok', ok);
+    integBadge.classList.toggle('fail', !ok);
+    auditState.innerHTML = ok ? '<span class="ok">verified</span>' : '<span class="fail">failed</span>';
+  };
+  setIntegrity(integrity);
+
+  // Action chips (simulate router decision and update audit last)
+  document.querySelectorAll('.chip.btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const act = btn.getAttribute('data-action') || 'ALLOWED';
+      decisionEl.textContent = (act === 'BLOCKED_CRIT') ? 'BLOCKED' : act;
+      auditLast.textContent = decisionEl.textContent;
+      // Visual feedback
+      document.querySelectorAll('.chip.btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      // If template chosen, show template category
+      if (act.startsWith('TEMPLATE')) templateEl.textContent = 'general';
+    });
+  });
+
+  // If the host app wants to message updates (e.g., Streamlit -> iframe), support a minimal API:
+  // window.postMessage({type:'sra:update', eps:0.42, decision:'BLOCKED', risk:'high', pressure:0.73, integrity:'ok'}, '*')
+  window.addEventListener('message', (ev) => {
+    const data = ev?.data || {};
+    if (data.type !== 'sra:update') return;
+    if (typeof data.eps === 'number') {
+      const v = clamp(data.eps, 0, 1);
+      epsEl.textContent = v.toFixed(2);
+      epsFill.style.width = (v*100).toFixed(0) + '%';
+    }
+    if (typeof data.pressure === 'number') {
+      pressureEl.textContent = clamp(data.pressure, 0, 1).toFixed(2);
+    }
+    if (typeof data.risk === 'string') {
+      riskEl.textContent = data.risk;
+      Array.from(legend.querySelectorAll('.chip')).forEach(ch => ch.classList.remove('selected'));
+      const cls = data.risk.startsWith('crit') ? 'crit' : data.risk;
+      const match = legend.querySelector('.chip.'+cls);
+      if (match) match.classList.add('selected');
+    }
+    if (typeof data.decision === 'string') {
+      decisionEl.textContent = data.decision.toUpperCase();
+      auditLast.textContent = decisionEl.textContent;
+    }
+    if (typeof data.integrity === 'string') setIntegrity(data.integrity.toLowerCase());
+  });
+</script>
+</body>
+</html>

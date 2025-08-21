@@ -1,0 +1,94 @@
+version: 1
+bands:
+  s1:
+    pressure_thresholds:
+      low: 0.20
+      medium: 0.40      # (option: set 0.35 if you want "faculty-strict")
+      high: 0.70        # (option: set 0.65 if you want "faculty-strict")
+      critical: 0.90
+    flags:
+      - IGNORECASE
+      - MULTILINE
+    detectors:
+      - type: regex_set
+        word_boundary: true
+        patterns:
+          instruction_injection:
+            # tolerant to spacing/punctuation/zero-width obfuscations
+            - "(?:i\\W*?g\\W*?n\\W*?o\\W*?r\\W*?e|dis\\W*?re\\W*?gard)[\\s\\W_]*(?:all\\s+)?(?:previous|prior)?[\\s\\W_]*(?:instructions?|prompts?|rules?)"
+            - "over\\W*?rule[\\s\\W_]*(?:the\\s+)?(system|safety|policy)[\\s\\W_]*instructions?"
+            - "(?:do\\s*not|don'?t)\\s*follow[\\s\\W_]*(?:the\\s+)?(rules?|guardrails?|safety)"
+            - "(?:ignore|bypass)[\\s\\W_]*the[\\s\\W_]*(?:content|safety|moderation)[\\s\\W_]*filter"
+          system_prompt_probing:
+            - "(reveal|show|display|expose|leak)[\\s\\W_]*(the\\s+)?(system|developer|hidden)[\\s\\W_]*prompt"
+            - "(what|which)[\\s\\W_]*is[\\s\\W_]*your[\\s\\W_]*(system|developer|initialization)[\\s\\W_]*prompt"
+            - "(print|dump)[\\s\\W_]*(system|developer)[\\s\\W_]*(message|prompt|policy)"
+          jailbreaking:
+            - "(bypass|circumvent|work\\s*around|get\\s*around)[\\s\\W_]{0,20}(guard|security|safety|restriction|filter|policy|rules?)"
+            - "(?:act|behave)\\s+as\\s+(?:dan|developer\\s*mode|jailbroken|unfiltered)\\b"
+            - "\\b(?:no\\s*rules|no\\s*guardrails|ignore\\s*policy)\\b"
+          data_exfiltration:
+            - "\\/etc\\/passwd"
+            - "(?:list|dump|enumerate)[\\s\\W_]{0,20}(users?|files?|secrets?)"
+          pii_leak:
+            - "[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}"        # email
+            - "\\b\\d{3}[-\\.\\s]?\\d{2}[-\\.\\s]?\\d{4}\\b"  # SSN (US)
+            - "\\b\\+?\\d{1,3}[\\s\\-]?(?:\\(\\d{2,4}\\)|\\d{2,4})[\\s\\-]?\\d{3,4}[\\s\\-]?\\d{3,4}\\b"  # phone (broad)
+          api_key_harvest:
+            # general "ask for keys/secrets" phrasing
+            - "(?:give|share|leak|reveal|show)[\\s\\W_]{0,15}(api|access|service)[\\s\\W_]*keys?"
+            - "(?:what\\s*is|print|dump)[\\s\\W_]{0,15}(?:your|the)[\\s\\W_]*(api|openai|service)[\\s\\W_]*key"
+            # inline key patterns (generic)
+            - "(?i)api[_-]?key\\s*[:=]\\s*[A-Za-z0-9_\\-]{12,}"
+            - "(?i)(secret|token|bearer)\\s*[:=]\\s*[A-Za-z0-9_\\-]{12,}"
+            # common provider shapes (safe, partial—no real keys)
+            - "sk-[A-Za-z0-9]{16,}"            # OpenAI-like
+            - "AIza[0-9A-Za-z\\-_]{15,}"       # Google-like
+            - "ghp_[0-9A-Za-z]{20,}"           # GitHub-like
+          secret_exfiltration:
+            - "(?:env|environment)[\\s\\W_]*variables?.{0,20}(?:list|dump|print)"
+            - "(?:credentials?|passwords?|secrets?)\\s*(?:file|store|vault)"
+            - "\\b\\.env\\b"
+      - type: aho_corasick
+        ac_terms:
+          system_prompt_probing:
+            - "system prompt"
+            - "developer message"
+            - "hidden instructions"
+            - "reveal system prompt"
+            - "show system prompt"
+          instruction_injection:
+            - "ignore previous instructions"
+            - "disregard prior rules"
+            - "bypass safety filter"
+            - "ignore the safety policy"
+          jailbreaking:
+            - "developer mode"
+            - "act as dan"
+            - "unfiltered mode"
+          api_key_harvest:
+            - "api key"
+            - "openai key"
+            - "share api keys"
+            - "leak the key"
+          secret_exfiltration:
+            - "environment variables"
+            - "print env"
+            - "dump credentials"
+pattern_metadata:
+  severity_levels:
+    instruction_injection: high
+    system_prompt_probing: high
+    jailbreaking: high
+    data_exfiltration: high
+    api_key_harvest: high
+    secret_exfiltration: high
+    pii_leak: medium
+  confidence_weights:
+    instruction_injection: 0.95
+    system_prompt_probing: 0.95
+    jailbreaking: 0.92
+    data_exfiltration: 0.95
+    api_key_harvest: 0.95
+    secret_exfiltration: 0.93
+    pii_leak: 0.80
